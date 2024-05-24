@@ -10,6 +10,7 @@ option(lib "Build Redox as a dynamic library." ON)
 option(static_lib "Build Redox as a static library." ON)
 option(tests "Build all tests." OFF)
 option(examples "Build all examples." OFF)
+option(USE_LIBHV "Build with libhv" ON)
 
 # Use Release if no configuration specified
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -40,16 +41,22 @@ endif()
 
 find_package(Threads REQUIRED)
 find_package(hiredis REQUIRED)
-find_package(libev REQUIRED)
+set(REDOX_LIB_INCLUDES ${HIREDIS_INCLUDE_DIRS})
 
-set(REDOX_LIB_INCLUDES
-  ${HIREDIS_INCLUDE_DIRS}
-  ${LIBEV_INCLUDE_DIRS})
-
-set(REDOX_LIB_DEPS
+set(REDOX_LIB_DEPS 
   ${HIREDIS_LIBRARIES}
-  ${LIBEV_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT})
+
+if (USE_LIBHV)
+  add_definitions(-DUSE_LIBHV)
+  find_package(libhv REQUIRED)
+  list(APPEND REDOX_LIB_INCLUDES ${LIBHV_INCLUDE_DIRS})
+  list(APPEND REDOX_LIB_DEPS hv)
+else()
+  find_package(libev REQUIRED)
+  list(APPEND REDOX_LIB_INCLUDES ${LIBEV_INCLUDE_DIRS})
+  list(APPEND REDOX_LIB_DEPS ${LIBEV_LIBRARIES})
+endif()
 
 # ---------------------------------------------------------
 # Source files

@@ -156,7 +156,7 @@ private:
   std::mutex psubscribed_topics_guard_;
 
   // Set of persisting commands, so that we can cancel them
-  std::set<Command<redisReply *> *> commands_;
+  std::set<Command*> commands_;
 
   // Reference to rdx_.logger_ for convenience
   log::Logger &logger_;

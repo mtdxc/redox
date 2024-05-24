@@ -21,7 +21,6 @@
 #include <vector>
 #include <set>
 #include <unordered_set>
-
 #include "command.hpp"
 #include "client.hpp"
 
@@ -29,22 +28,21 @@ using namespace std;
 
 namespace redox {
 
-template <class ReplyT>
-Command<ReplyT>::Command(Redox *rdx, long id, const vector<string> &cmd,
-                         const function<void(Command<ReplyT> &)> &callback, double repeat,
-                         double after, bool free_memory, log::Logger &logger)
+Command::Command(Redox *rdx, long id, const vector<string> &cmd,
+                         const function<void(Command &)> &callback, 
+                         double repeat, double after, 
+                         bool free_memory, log::Logger &logger)
     : rdx_(rdx), id_(id), cmd_(cmd), repeat_(repeat), after_(after), free_memory_(free_memory),
       callback_(callback), last_error_(), logger_(logger) {
-  timer_guard_.lock();
 }
 
-template <class ReplyT> void Command<ReplyT>::wait() {
+void Command::wait() {
   unique_lock<mutex> lk(waiter_lock_);
   waiter_.wait(lk, [this]() { return waiting_done_.load(); });
   waiting_done_ = {false};
 }
 
-template <class ReplyT> void Command<ReplyT>::processReply(redisReply *r) {
+void Command::processReply(redisReply *r) {
 
   last_error_.clear();
   reply_obj_ = r;
@@ -56,8 +54,8 @@ template <class ReplyT> void Command<ReplyT>::processReply(redisReply *r) {
     Redox::disconnectedCallback(rdx_->ctx_, REDIS_ERR);
 
   } else {
-    lock_guard<mutex> lg(reply_guard_);
-    parseReplyObject();
+    reply_status_ = OK_REPLY;
+    //parseReplyObject();
   }
 
   invoke();
@@ -89,38 +87,24 @@ template <class ReplyT> void Command<ReplyT>::processReply(redisReply *r) {
 
 // This is the only method in Command that has
 // access to private members of Redox
-template <class ReplyT> void Command<ReplyT>::free() {
+void Command::free() {
 
   lock_guard<mutex> lg(rdx_->free_queue_guard_);
   rdx_->commands_to_free_.push(id_);
   ev_async_send(rdx_->evloop_, &rdx_->watcher_free_);
 }
 
-template <class ReplyT> void Command<ReplyT>::freeReply() {
+void Command::freeReply() {
 
-  if (reply_obj_ == nullptr)
-    return;
-
-  freeReplyObject(reply_obj_);
-  reply_obj_ = nullptr;
-}
-
-/**
-* Create a copy of the reply and return it. Use a guard
-* to make sure we don't return a reply while it is being
-* modified.
-*/
-template <class ReplyT> ReplyT Command<ReplyT>::reply() {
-  lock_guard<mutex> lg(reply_guard_);
-  if (!ok()) {
-    logger_.warning() << cmd() << ": Accessing reply value while status != OK.";
+  if (reply_obj_) {
+    freeReplyObject(reply_obj_);
+    reply_obj_ = nullptr;
   }
-  return reply_val_;
 }
 
-template <class ReplyT> string Command<ReplyT>::cmd() const { return rdx_->vecToStr(cmd_); }
+string Command::cmd() const { return rdx_->vecToStr(cmd_); }
 
-template <class ReplyT> bool Command<ReplyT>::isExpectedReply(int type) {
+bool Command::isExpectedReply(int type) {
 
   if (reply_obj_->type == type) {
     reply_status_ = OK_REPLY;
@@ -131,15 +115,14 @@ template <class ReplyT> bool Command<ReplyT>::isExpectedReply(int type) {
     return false;
 
   stringstream errorMessage;
-  errorMessage << "Received reply of type " << reply_obj_->type << ", expected type " << type
-               << ".";
+  errorMessage << "Received reply of type " << reply_obj_->type << ", expected type " << type << ".";
   last_error_ = errorMessage.str();
   logger_.error() << cmd() << ": " << last_error_;
   reply_status_ = WRONG_TYPE;
   return false;
 }
 
-template <class ReplyT> bool Command<ReplyT>::isExpectedReply(int typeA, int typeB) {
+bool Command::isExpectedReply(int typeA, int typeB) {
 
   if ((reply_obj_->type == typeA) || (reply_obj_->type == typeB)) {
     reply_status_ = OK_REPLY;
@@ -158,7 +141,7 @@ template <class ReplyT> bool Command<ReplyT>::isExpectedReply(int typeA, int typ
   return false;
 }
 
-template <class ReplyT> bool Command<ReplyT>::checkErrorReply() {
+bool Command::checkErrorReply() {
 
   if (reply_obj_->type == REDIS_REPLY_ERROR) {
     if (reply_obj_->str != 0) {
@@ -172,7 +155,7 @@ template <class ReplyT> bool Command<ReplyT>::checkErrorReply() {
   return false;
 }
 
-template <class ReplyT> bool Command<ReplyT>::checkNilReply() {
+bool Command::checkNilReply() {
 
   if (reply_obj_->type == REDIS_REPLY_NIL) {
     logger_.warning() << cmd() << ": Nil reply.";
@@ -186,78 +169,90 @@ template <class ReplyT> bool Command<ReplyT>::checkNilReply() {
 // Specializations of parseReplyObject for all expected return types
 // ----------------------------------------------------------------------------
 
-template <> void Command<redisReply *>::parseReplyObject() {
+template <> redisReply* Command::reply() {
   if (!checkErrorReply())
     reply_status_ = OK_REPLY;
-  reply_val_ = reply_obj_;
+  return reply_obj_;
 }
 
-template <> void Command<string>::parseReplyObject() {
+template <> string Command::reply() {
+  string ret;
+  if (isExpectedReply(REDIS_REPLY_STRING, REDIS_REPLY_STATUS)) {
+    ret = {reply_obj_->str, static_cast<size_t>(reply_obj_->len)};
+  }
+  return ret;
+}
+
+template <> char* Command::reply() {
   if (!isExpectedReply(REDIS_REPLY_STRING, REDIS_REPLY_STATUS))
-    return;
-  reply_val_ = {reply_obj_->str, static_cast<size_t>(reply_obj_->len)};
+    return nullptr;
+  return reply_obj_->str;
 }
 
-template <> void Command<char *>::parseReplyObject() {
-  if (!isExpectedReply(REDIS_REPLY_STRING, REDIS_REPLY_STATUS))
-    return;
-  reply_val_ = reply_obj_->str;
+template <> int Command::reply() {
+  if (!isExpectedReply(REDIS_REPLY_INTEGER))
+    return -1;
+  return (int)reply_obj_->integer;
 }
 
-template <> void Command<int>::parseReplyObject() {
+template <> long long int Command::reply() {
 
   if (!isExpectedReply(REDIS_REPLY_INTEGER))
-    return;
-  reply_val_ = (int)reply_obj_->integer;
+    return -1;
+  return reply_obj_->integer;
 }
 
-template <> void Command<long long int>::parseReplyObject() {
-
-  if (!isExpectedReply(REDIS_REPLY_INTEGER))
-    return;
-  reply_val_ = reply_obj_->integer;
-}
-
-template <> void Command<nullptr_t>::parseReplyObject() {
-
+template <> nullptr_t Command::reply() {
   if (!isExpectedReply(REDIS_REPLY_NIL))
-    return;
-  reply_val_ = nullptr;
+    return nullptr;
 }
 
-template <> void Command<vector<string>>::parseReplyObject() {
-
+template <> vector<string> Command::reply() {
+  vector<string> ret;
   if (!isExpectedReply(REDIS_REPLY_ARRAY))
-    return;
+    return ret;
 
   for (size_t i = 0; i < reply_obj_->elements; i++) {
     redisReply *r = *(reply_obj_->element + i);
-    reply_val_.emplace_back(r->str, r->len);
+    ret.emplace_back(r->str, r->len);
   }
+  return ret;
 }
 
-template <> void Command<unordered_set<string>>::parseReplyObject() {
-
+template <> unordered_set<string> Command::reply() {
+  unordered_set<string> ret;
   if (!isExpectedReply(REDIS_REPLY_ARRAY))
-    return;
+    return ret;
 
   for (size_t i = 0; i < reply_obj_->elements; i++) {
     redisReply *r = *(reply_obj_->element + i);
-    reply_val_.emplace(r->str, r->len);
+    ret.emplace(r->str, r->len);
   }
+  return ret;
 }
 
-template <> void Command<set<string>>::parseReplyObject() {
-
+template <> set<string> Command::reply() {
+  set<string> ret;
   if (!isExpectedReply(REDIS_REPLY_ARRAY))
-    return;
+    return ret;
 
   for (size_t i = 0; i < reply_obj_->elements; i++) {
     redisReply *r = *(reply_obj_->element + i);
-    reply_val_.emplace(r->str, r->len);
+    ret.emplace(r->str, r->len);
   }
+  return ret;
 }
 
+void Command::stopTimer() {
+  lock_guard<mutex> lg(timer_guard_);
+#ifdef USE_LIBHV
+  htimer_del(timer_);
+  timer_ = nullptr;
+#else
+  ev_timer_stop(rdx_->evloop_, &timer_);
+#endif
+}
+#if 0
 // Explicit template instantiation for available types, so that the generated
 // library contains them and we can keep the method definitions out of the
 // header file.
@@ -270,5 +265,5 @@ template class Command<nullptr_t>;
 template class Command<vector<string>>;
 template class Command<set<string>>;
 template class Command<unordered_set<string>>;
-
+#endif
 } // End namespace redox

@@ -68,16 +68,16 @@ void Subscriber::stop() {
     });
   }
 
-  for (Command<redisReply *> *c : commands_)
+  for (Command *c : commands_)
     c->free();
 
   rdx_.stop();
 }
 
 // For debugging only
-void debugReply(Command<redisReply *> c) {
+void debugReply(Command c) {
 
-  redisReply *reply = c.reply();
+  redisReply *reply = c.reply<redisReply*>();
 
   cout << "------" << endl;
   cout << c.cmd() << " " << (reply->type == REDIS_REPLY_ARRAY) << " " << (reply->elements) << endl;
@@ -100,10 +100,9 @@ void Subscriber::subscribeBase(const string cmd_name, const string topic,
                                function<void(const string &)> unsub_callback,
                                function<void(const string &, int)> err_callback) {
 
-  Command<redisReply *> &sub_cmd = rdx_.commandLoop<redisReply *>(
+  Command &sub_cmd = rdx_.commandLoop(
       {cmd_name, topic},
-      [this, topic, msg_callback, err_callback, sub_callback, unsub_callback](
-          Command<redisReply *> &c) {
+      [=](Command &c) {
 
         if (!c.ok()) {
           num_pending_subs_--;
@@ -112,7 +111,7 @@ void Subscriber::subscribeBase(const string cmd_name, const string topic,
           return;
         }
 
-        redisReply *reply = c.reply();
+        redisReply *reply = c.reply<redisReply*>();
 
         // If the last entry is an integer, then it is a [p]sub/[p]unsub command
         if ((reply->type == REDIS_REPLY_ARRAY) &&
@@ -204,7 +203,7 @@ void Subscriber::psubscribe(const string topic,
 
 void Subscriber::unsubscribeBase(const string cmd_name, const string topic,
                                  function<void(const string &, int)> err_callback) {
-  rdx_.command<redisReply *>({cmd_name, topic}, [topic, err_callback](Command<redisReply *> &c) {
+  rdx_.command({cmd_name, topic}, [topic, err_callback](Command &c) {
     if (!c.ok()) {
       if (err_callback)
         err_callback(topic, c.status());

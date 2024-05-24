@@ -53,15 +53,16 @@ public:
 
   void log(Level l, std::string oMessage);
 
-  Logstream operator()(Level l = Level::Info) { return Logstream(*this, l); }
+  Logstream getStream(Level l = Level::Info) { return Logstream(*this, l); }
+  Logstream operator()(Level l = Level::Info) { return getStream(l); }
 
   // Helpers
-  Logstream trace() { return (*this)(Level::Trace); }
-  Logstream debug() { return (*this)(Level::Debug); }
-  Logstream info() { return (*this)(Level::Info); }
-  Logstream warning() { return (*this)(Level::Warning); }
-  Logstream error() { return (*this)(Level::Error); }
-  Logstream fatal() { return (*this)(Level::Fatal); }
+  Logstream trace() { return getStream(Level::Trace); }
+  Logstream debug() { return getStream(Level::Debug); }
+  Logstream info() { return getStream(Level::Info); }
+  Logstream warning() { return getStream(Level::Warning); }
+  Logstream error() { return getStream(Level::Error); }
+  Logstream fatal() { return getStream(Level::Fatal); }
 
 private:
   const tm *getLocalTime();

@@ -36,7 +36,13 @@
 
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
+#if USE_LIBHV
+#include <hiredis/adapters/libhv.h>
+typedef struct hevent_s ev_async;
+#define ev_async_send hloop_post_event
+#else
 #include <hiredis/adapters/libev.h>
+#endif
 
 #include "utils/logger.hpp"
 #include "command.hpp"
@@ -127,14 +133,8 @@ public:
   * memory for it is automatically freed when the callback returns.
   */
 
-  template <class ReplyT>
   void command(const std::vector<std::string> &cmd,
-               const std::function<void(Command<ReplyT> &)> &callback = nullptr);
-
-  /**
-  * Asynchronously runs a command and ignores any errors or replies.
-  */
-  void command(const std::vector<std::string> &cmd);
+               const std::function<void(Command &)> &callback = nullptr);
 
   /**
   * Synchronously runs a command, returning the Command object only once
@@ -142,13 +142,13 @@ public:
   * calling .free() on the returned Command object.
   */
 
-  template <class ReplyT> Command<ReplyT> &commandSync(const std::vector<std::string> &cmd);
+  Command &commandSync(const std::vector<std::string> &cmd);
 
   /**
   * Synchronously runs a command, returning only once a reply is received
   * or there's an error. Returns true on successful reply, false on error.
   */
-  bool commandSync(const std::vector<std::string> &cmd);
+  // bool commandSync(const std::vector<std::string> &cmd);
 
   /**
   * Creates an asynchronous command that is run every [repeat] seconds,
@@ -157,9 +157,9 @@ public:
   * on the returned Command object.
   */
 
-  template <class ReplyT>
-  Command<ReplyT> &commandLoop(const std::vector<std::string> &cmd,
-                               const std::function<void(Command<ReplyT> &)> &callback,
+  
+  Command &commandLoop(const std::vector<std::string> &cmd,
+                               const std::function<void(Command &)> &callback,
                                double repeat, double after = 0.0);
 
   /**
@@ -169,9 +169,8 @@ public:
   * after the callback returns.
   */
 
-  template <class ReplyT>
   void commandDelayed(const std::vector<std::string> &cmd,
-                      const std::function<void(Command<ReplyT> &)> &callback, double after);
+                      const std::function<void(Command &)> &callback, double after);
 
   // ------------------------------------------------
   // Utility methods
@@ -245,9 +244,9 @@ private:
 
   // One stop shop for creating commands. The base of all public
   // methods that run commands.
-  template <class ReplyT>
-  Command<ReplyT> &createCommand(const std::vector<std::string> &cmd,
-                                 const std::function<void(Command<ReplyT> &)> &callback = nullptr,
+  
+  Command &createCommand(const std::vector<std::string> &cmd,
+                                 const std::function<void(Command &)> &callback = nullptr,
                                  double repeat = 0.0, double after = 0.0, bool free_memory = true);
 
   // Setup code for the constructors
@@ -262,52 +261,44 @@ private:
   // Main event loop, run in a separate thread
   void runEventLoop();
 
-  // Return the command map corresponding to the templated reply type
-  template <class ReplyT> std::unordered_map<long, Command<ReplyT> *> &getCommandMap();
-
   // Return the given Command from the relevant command map, or nullptr if not there
-  template <class ReplyT> Command<ReplyT> *findCommand(long id);
+  Command *findCommand(long id);
 
   // Send all commands in the command queue to the server
-  static void processQueuedCommands(struct ev_loop *loop, ev_async *async, int revents);
+  void processQueuedCommands();
 
   // Process the command with the given ID. Return true if the command had the
   // templated type, and false if it was not in the command map of that type.
-  template <class ReplyT> bool processQueuedCommand(long id);
+  bool processQueuedCommand(long id);
 
   // Callback given to libev for a Command's timer watcher, to be processed in
   // a deferred or looping state
-  template <class ReplyT>
-  static void submitCommandCallback(struct ev_loop *loop, ev_timer *timer, int revents);
-
+  void submitCommandCallback(long id);
   // Submit an asynchronous command to the Redox server. Return
   // true if succeeded, false otherwise.
-  template <class ReplyT> static bool submitToServer(Command<ReplyT> *c);
+  static bool submitToServer(Command *c);
 
   // Callback given to hiredis to invoke when a reply is received
-  template <class ReplyT>
   static void commandCallback(redisAsyncContext *ctx, void *r, void *privdata);
 
   // Free all commands in the commands_to_free_ queue
-  static void freeQueuedCommands(struct ev_loop *loop, ev_async *async, int revents);
+  void freeQueuedCommands();
 
   // Free the command with the given ID. Return true if the command had the templated
   // type, and false if it was not in the command map of that type.
-  template <class ReplyT> bool freeQueuedCommand(long id);
+  bool freeQueuedCommand(long id);
 
   // Invoked by Command objects when they are completed. Removes them
   // from the command map.
-  template <class ReplyT> void deregisterCommand(const long id) {
+  void deregisterCommand(const long id) {
     std::lock_guard<std::mutex> lg1(command_map_guard_);
-    getCommandMap<ReplyT>().erase(id);
+    commands_reply_.erase(id);
     commands_deleted_ += 1;
   }
 
   // Free all commands remaining in the command maps
   long freeAllCommands();
 
-  // Helper function for freeAllCommands to access a specific command map
-  template <class ReplyT> long freeAllCommandsOfType();
 
   // Helper functions to get/set variables with synchronization.
   int getConnectState();
@@ -330,8 +321,11 @@ private:
   std::function<void(int)> user_connection_callback_;
 
   // Dynamically allocated libev event loop
+#ifdef USE_LIBHV
+  hloop_t *evloop_;
+#else
   struct ev_loop *evloop_;
-
+#endif
   // No-wait mode for high-performance
   std::atomic_bool nowait_ = {false};
 
@@ -365,16 +359,7 @@ private:
   // template<class ReplyT>
   // std::unordered_map<long, Command<ReplyT>*> commands_;
   // ---------
-  std::unordered_map<long, Command<redisReply *> *> commands_redis_reply_;
-  std::unordered_map<long, Command<std::string> *> commands_string_;
-  std::unordered_map<long, Command<char *> *> commands_char_p_;
-  std::unordered_map<long, Command<int> *> commands_int_;
-  std::unordered_map<long, Command<long long int> *> commands_long_long_int_;
-  std::unordered_map<long, Command<std::nullptr_t> *> commands_null_;
-  std::unordered_map<long, Command<std::vector<std::string>> *> commands_vector_string_;
-  std::unordered_map<long, Command<std::set<std::string>> *> commands_set_string_;
-  std::unordered_map<long, Command<std::unordered_set<std::string>> *>
-      commands_unordered_set_string_;
+  std::unordered_map<long, Command *> commands_reply_;
   std::mutex command_map_guard_; // Guards access to all of the above
 
   // Command IDs pending to be sent to the server
@@ -387,65 +372,10 @@ private:
 
   // Commands use this method to deregister themselves from Redox,
   // give it access to private members
-  template <class ReplyT> friend void Command<ReplyT>::free();
+  friend void Command::free();
 
   // Access to call disconnectedCallback
-  template <class ReplyT> friend void Command<ReplyT>::processReply(redisReply *r);
+  friend void Command::processReply(redisReply *r);
 };
-
-// ------------------------------------------------
-// Implementation of templated methods
-// ------------------------------------------------
-
-template <class ReplyT>
-Command<ReplyT> &Redox::createCommand(const std::vector<std::string> &cmd,
-                                      const std::function<void(Command<ReplyT> &)> &callback,
-                                      double repeat, double after, bool free_memory) {
-  {
-    std::unique_lock<std::mutex> ul(running_lock_);
-    if (!running_) {
-      throw std::runtime_error("[ERROR] Need to connect Redox before running commands!");
-    }
-  }
-
-  auto *c = new Command<ReplyT>(this, commands_created_.fetch_add(1), cmd, 
-                                callback, repeat, after, free_memory, logger_);
-
-  std::lock_guard<std::mutex> lg(queue_guard_);
-  std::lock_guard<std::mutex> lg2(command_map_guard_);
-
-  getCommandMap<ReplyT>()[c->id_] = c;
-  command_queue_.push(c->id_);
-
-  // Signal the event loop to process this command
-  ev_async_send(evloop_, &watcher_command_);
-
-  return *c;
-}
-
-template <class ReplyT>
-void Redox::command(const std::vector<std::string> &cmd,
-                    const std::function<void(Command<ReplyT> &)> &callback) {
-  createCommand(cmd, callback);
-}
-
-template <class ReplyT>
-Command<ReplyT> &Redox::commandLoop(const std::vector<std::string> &cmd,
-                                    const std::function<void(Command<ReplyT> &)> &callback,
-                                    double repeat, double after) {
-  return createCommand(cmd, callback, repeat, after, false);
-}
-
-template <class ReplyT>
-void Redox::commandDelayed(const std::vector<std::string> &cmd,
-                           const std::function<void(Command<ReplyT> &)> &callback, double after) {
-  createCommand(cmd, callback, 0, after, true);
-}
-
-template <class ReplyT> Command<ReplyT> &Redox::commandSync(const std::vector<std::string> &cmd) {
-  auto &c = createCommand<ReplyT>(cmd, nullptr, 0, 0, false);
-  c.wait();
-  return c;
-}
 
 } // End namespace redis

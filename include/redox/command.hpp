@@ -25,10 +25,12 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
-
-#include <hiredis/adapters/libev.h>
-#include <hiredis/async.h>
-
+#ifdef USE_LIBHV
+#include <hv/hloop.h>
+#else
+#include <ev.h>
+#endif // USE_LIBHV
+#include <hiredis/hiredis.h>
 #include "utils/logger.hpp"
 
 namespace redox {
@@ -42,7 +44,7 @@ class Redox;
 * represent a deferred or looping command, in which case the success or
 * error callbacks are invoked more than once.
 */
-template <class ReplyT> class Command {
+class Command {
 
 public:
   // Reply codes
@@ -69,6 +71,7 @@ public:
   /**
   * Returns the reply value, if the reply was successful (ok() == true).
   */
+  template <class ReplyT> 
   ReplyT reply();
 
   /**
@@ -99,17 +102,15 @@ public:
   const double after_;
   const bool free_memory_;
 
+  void stopTimer();
+
 private:
   Command(Redox *rdx, long id, const std::vector<std::string> &cmd,
-          const std::function<void(Command<ReplyT> &)> &callback, double repeat, double after,
+          const std::function<void(Command &)> &callback, double repeat, double after,
           bool free_memory, log::Logger &logger);
 
   // Handles a new reply from the server
   void processReply(redisReply *r);
-
-  // Invoke a user callback from the reply object. This method is specialized
-  // for each ReplyT of Command.
-  void parseReplyObject();
 
   // Directly invoke the user callback if it exists
   void invoke() {
@@ -129,10 +130,9 @@ private:
   redisReply *reply_obj_ = nullptr;
 
   // User callback
-  const std::function<void(Command<ReplyT> &)> callback_;
+  const std::function<void(Command &)> callback_;
 
   // Place to store the reply value and status.
-  ReplyT reply_val_;
   int reply_status_;
   std::string last_error_;
 
@@ -143,11 +143,12 @@ private:
   std::atomic_bool canceled_ = {false};
 
   // libev timer watcher
+#ifdef USE_LIBHV
+  htimer_t* timer_;
+#else
   ev_timer timer_;
+#endif
   std::mutex timer_guard_;
-
-  // Access the reply value only when not being changed
-  std::mutex reply_guard_;
 
   // For synchronous use
   std::condition_variable waiter_;
