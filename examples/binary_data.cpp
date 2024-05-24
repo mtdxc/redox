@@ -30,14 +30,14 @@ int main(int argc, char* argv[]) {
 
   rdx.del(binary_key);
 
-  auto& c = rdx.commandSync<string>({"SET", binary_key, binary_data});
-  if(c.ok()) cout << "Reply: " << c.reply() << endl;
+  auto& c = rdx.commandSync({"SET", binary_key, binary_data});
+  if(c.ok()) cout << "Reply: " << c.reply<string>() << endl;
   else cerr << "Failed to set key! Status: " << c.status() << endl;
   c.free();
 
-  auto& c2 = rdx.commandSync<string>({"GET", binary_key});
+  auto& c2 = rdx.commandSync({"GET", binary_key});
   if(c2.ok()) {
-    if(c2.reply() == binary_data) cout << "Binary data matches!" << endl;
+    if(c2.reply<string>() == binary_data) cout << "Binary data matches!" << endl;
     else cerr << "Binary data differs!" << endl;
   }
   else cerr << "Failed to get key! Status: " << c2.status() << endl;

@@ -29,14 +29,14 @@ int main(int argc, char* argv[]) {
   atomic_int count = {0};
 
   for(int i = 1; i <= len; i++) {
-    rdx.command<int>({"lpush", "test", "1"}, [&t0, &t1, &count, len, &rdx](Command<int>& c) {
+    rdx.command({"lpush", "test", "1"}, [&t0, &t1, &count, len, &rdx](Command& c) {
 
       if(!c.ok()) return;
 
       count += 1;
 
       if(count == len) {
-        cout << c.cmd() << ": " << c.reply() << endl;
+        cout << c.cmd() << ": " << c.reply<int>() << endl;
 
         double t2 = time_s();
         cout << "Time to queue async commands: " << t1 - t0 << "s" << endl;

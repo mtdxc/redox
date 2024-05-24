@@ -21,29 +21,29 @@ int main(int argc, char* argv[]) {
 
   rdx.commandSync(rdx.strToVec("LPUSH mylist 1 2 3 4 5 6 7 8 9 10"));
 
-  rdx.command<vector<string>>({"LRANGE", "mylist", "0", "4"},
-    [](Command<vector<string>>& c){
+  rdx.command({"LRANGE", "mylist", "0", "4"},
+    [](Command& c){
       if(!c.ok()) return;
       cout << "Last 5 elements as a vector: ";
-      for (const string& s : c.reply()) cout << s << " ";
+      for (const string& s : c.reply<vector<string>>()) cout << s << " ";
       cout << endl;
     }
   );
 
-  rdx.command<unordered_set<string>>(rdx.strToVec("LRANGE mylist 0 4"),
-    [](Command<unordered_set<string>>& c){
+  rdx.command(rdx.strToVec("LRANGE mylist 0 4"),
+    [](Command& c){
       if(!c.ok()) return;
       cout << "Last 5 elements as a hash: ";
-      for (const string& s : c.reply()) cout << s << " ";
+      for (const string& s : c.reply<unordered_set<string>>()) cout << s << " ";
       cout << endl;
     }
   );
 
-  rdx.command<set<string>>(rdx.strToVec("LRANGE mylist 0 4"),
-    [&rdx](Command<set<string>>& c) {
+  rdx.command(rdx.strToVec("LRANGE mylist 0 4"),
+    [&rdx](Command& c) {
       if(c.ok()) {
         cout << "Last 5 elements as a set: ";
-        for (const string& s : c.reply()) cout << s << " ";
+        for (const string& s : c.reply<set<string>>()) cout << s << " ";
         cout << endl;
       }
       rdx.stop();

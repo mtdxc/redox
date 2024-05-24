@@ -41,9 +41,9 @@ int main(int argc, char* argv[]) {
   double t0 = time_s();
   atomic_int count(0);
 
-  Command<int>& cmd = rdx.commandLoop<int>(
+  Command& cmd = rdx.commandLoop(
       cmd_vec,
-      [&count, &rdx](Command<int>& c) {
+      [&count, &rdx](Command& c) {
         if (!c.ok()) {
           cerr << "Bad reply: " << c.status() << endl;
         }

@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 
   if(!rdx.connect("localhost", 6379)) return 1;
 
-  if(rdx.commandSync({"SET", "simple_loop:count", "0"})) {
+  if(rdx.commandSync({"SET", "simple_loop:count", "0"}).ok()) {
     cout << "Reset the counter to zero." << endl;
   } else {
     cerr << "Failed to reset counter." << endl;
@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
   int count = 0;
 
   while(time_s() < t_end) {
-    Command<int>& c = rdx.commandSync<int>({"INCR", "simple_loop:count"});
+    auto& c = rdx.commandSync({"INCR", "simple_loop:count"});
     if(!c.ok()) cerr << "Bad reply, code: " << c.status() << endl;
     c.free();
     count++;

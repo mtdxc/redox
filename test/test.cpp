@@ -57,18 +57,18 @@ protected:
   mutex cmd_waiter_lock;
 
   // To make the callback code nicer
-  template <class ReplyT> using Callback = std::function<void(Command<ReplyT> &)>;
+  using Callback = std::function<void(Command&)>;
 
   /**
   * Helper function that returns a command callback to print out the
   * command/reply and to test the reply against the provided value.
   */
-  template <class ReplyT> Callback<ReplyT> check(const ReplyT &value) {
+  template <class ReplyT> Callback check(const ReplyT &value) {
     cmd_count++;
-    return [this, value](Command<ReplyT> &c) {
+    return [this, value](Command &c) {
       EXPECT_TRUE(c.ok());
       if (c.ok())
-        EXPECT_EQ(value, c.reply());
+        EXPECT_EQ(value, c.reply<ReplyT>());
       cmd_count--;
       cmd_waiter.notify_all();
     };
@@ -77,10 +77,10 @@ protected:
   /**
   * Wrapper for the callback that also prints out the command.
   */
-  template <class ReplyT> Callback<ReplyT> print(Callback<ReplyT> callback) {
-    return [callback](Command<ReplyT> &c) {
+  template <class ReplyT> Callback print(Callback callback) {
+    return [callback](Command &c) {
       if (c.ok())
-        cout << "[ASYNC] " << c.cmd() << ": " << c.reply() << endl;
+        cout << "[ASYNC] " << c.cmd() << ": " << c.reply<ReplyT>() << endl;
       callback(c);
     };
   }
@@ -88,16 +88,16 @@ protected:
   /**
   * Combination of print and check for simplicity.
   */
-  template <class ReplyT> Callback<ReplyT> print_and_check(const ReplyT &value) {
+  template <class ReplyT> Callback print_and_check(const ReplyT &value) {
     return print<ReplyT>(check<ReplyT>(value));
   }
 
   /**
   * Check the error
   */
-  template <class ReplyT> Callback<ReplyT> print_and_check_error(const ReplyT &value) {
+  template <class ReplyT> Callback print_and_check_error(const ReplyT &value) {
     cmd_count++;
-    return [this, value](Command<ReplyT> &c) {
+    return [this, value](Command &c) {
       EXPECT_FALSE(c.ok());
       EXPECT_FALSE(c.lastError().empty());
       //      EXPECT_EQ(value, c.reply());
@@ -117,26 +117,26 @@ protected:
     rdx.disconnect();
   }
 
-  template <class ReplyT> void check_sync(Command<ReplyT> &c, const ReplyT &value) {
+  template <class ReplyT> void check_sync(Command &c, const ReplyT &value) {
     ASSERT_TRUE(c.ok());
-    EXPECT_EQ(c.reply(), value);
+    EXPECT_EQ(c.reply<ReplyT>(), value);
     c.free();
   }
 
-  template <class ReplyT> void print_and_check_sync(Command<ReplyT> &c, const ReplyT &value) {
+  template <class ReplyT> void print_and_check_sync(Command &c, const ReplyT &value) {
     ASSERT_TRUE(c.ok());
-    EXPECT_EQ(c.reply(), value);
-    cout << "[SYNC] " << c.cmd() << ": " << c.reply() << endl;
+    EXPECT_EQ(c.reply<ReplyT>(), value);
+    cout << "[SYNC] " << c.cmd() << ": " << c.reply<ReplyT>() << endl;
     c.free();
   }
 
   /**
   * Check the error
   */
-  template <class ReplyT> void print_and_check_error_sync(Command<ReplyT> &c, const ReplyT &value) {
+  template <class ReplyT> void print_and_check_error_sync(Command &c, const ReplyT &value) {
     EXPECT_FALSE(c.ok());
     EXPECT_FALSE(c.lastError().empty());
-    //      EXPECT_EQ(value, c.reply());
+    //      EXPECT_EQ(value, c.reply<ReplyT>());
     cout << c.cmd() << ": " << c.lastError() << endl;
   }
 };
@@ -151,16 +151,16 @@ TEST_F(RedoxTest, TestConnectionFailure) { EXPECT_FALSE(rdx.connect("localhost",
 
 TEST_F(RedoxTest, GetSet) {
   connect();
-  rdx.command<string>({"SET", "redox_test:a", "apple"}, print_and_check<string>("OK"));
-  rdx.command<string>({"GET", "redox_test:a"}, print_and_check<string>("apple"));
+  rdx.command({"SET", "redox_test:a", "apple"}, print_and_check<string>("OK"));
+  rdx.command({"GET", "redox_test:a"}, print_and_check<string>("apple"));
   wait_for_replies();
 }
 
 TEST_F(RedoxTest, Delete) {
   connect();
-  rdx.command<string>({"SET", "redox_test:a", "apple"}, print_and_check<string>("OK"));
-  rdx.command<int>({"DEL", "redox_test:a"}, print_and_check(1));
-  rdx.command<nullptr_t>({"GET", "redox_test:a"}, check(nullptr));
+  rdx.command({"SET", "redox_test:a", "apple"}, print_and_check<string>("OK"));
+  rdx.command({"DEL", "redox_test:a"}, print_and_check(1));
+  rdx.command({"GET", "redox_test:a"}, check(nullptr));
   wait_for_replies();
 }
 
@@ -168,17 +168,17 @@ TEST_F(RedoxTest, Incr) {
   connect();
   int count = 100;
   for (int i = 0; i < count; i++) {
-    rdx.command<int>({"INCR", "redox_test:a"}, check(i + 1));
+    rdx.command({"INCR", "redox_test:a"}, check(i + 1));
   }
-  rdx.command<string>({"GET", "redox_test:a"}, print_and_check(to_string(count)));
+  rdx.command({"GET", "redox_test:a"}, print_and_check(to_string(count)));
   wait_for_replies();
 }
 
 TEST_F(RedoxTest, Delayed) {
   connect();
-  rdx.commandDelayed<int>({"INCR", "redox_test:a"}, check(1), 0.1);
+  rdx.commandDelayed({"INCR", "redox_test:a"}, check(1), 0.1);
   this_thread::sleep_for(chrono::milliseconds(150));
-  rdx.command<string>({"GET", "redox_test:a"}, print_and_check(to_string(1)));
+  rdx.command({"GET", "redox_test:a"}, print_and_check(to_string(1)));
   wait_for_replies();
 }
 
@@ -187,21 +187,21 @@ TEST_F(RedoxTest, Loop) {
   int count = 0;
   int target_count = 20;
   double dt = 0.005;
-  Command<int> &cmd = rdx.commandLoop<int>(
-      {"INCR", "redox_test:a"}, [this, &count](Command<int> &c) { check(++count)(c); }, dt);
+  Command &cmd = rdx.commandLoop(
+      {"INCR", "redox_test:a"}, [this, &count](Command &c) { check(++count)(c); }, dt);
 
   double wait_time = dt * (target_count - 0.5);
   this_thread::sleep_for(std::chrono::duration<double>(wait_time));
   cmd.free();
 
-  rdx.command<string>({"GET", "redox_test:a"}, print_and_check(to_string(target_count)));
+  rdx.command({"GET", "redox_test:a"}, print_and_check(to_string(target_count)));
   wait_for_replies();
 }
 
 TEST_F(RedoxTest, GetSetError) {
   connect();
-  rdx.command<string>({"SET", "redox_test:a", "apple"}, print_and_check<string>("OK"));
-  rdx.command<int>({"GET", "redox_test:a"}, print_and_check_error<int>(3));
+  rdx.command({"SET", "redox_test:a", "apple"}, print_and_check<string>("OK"));
+  rdx.command({"GET", "redox_test:a"}, print_and_check_error<int>(3));
   wait_for_replies();
 }
 
@@ -211,16 +211,16 @@ TEST_F(RedoxTest, GetSetError) {
 
 TEST_F(RedoxTest, GetSetSync) {
   connect();
-  print_and_check_sync<string>(rdx.commandSync<string>({"SET", "redox_test:a", "apple"}), "OK");
-  print_and_check_sync<string>(rdx.commandSync<string>({"GET", "redox_test:a"}), "apple");
+  print_and_check_sync<string>(rdx.commandSync({"SET", "redox_test:a", "apple"}), "OK");
+  print_and_check_sync<string>(rdx.commandSync({"GET", "redox_test:a"}), "apple");
   rdx.disconnect();
 }
 
 TEST_F(RedoxTest, DeleteSync) {
   connect();
-  print_and_check_sync<string>(rdx.commandSync<string>({"SET", "redox_test:a", "apple"}), "OK");
-  print_and_check_sync(rdx.commandSync<int>({"DEL", "redox_test:a"}), 1);
-  check_sync(rdx.commandSync<nullptr_t>({"GET", "redox_test:a"}), nullptr);
+  print_and_check_sync<string>(rdx.commandSync({"SET", "redox_test:a", "apple"}), "OK");
+  print_and_check_sync(rdx.commandSync({"DEL", "redox_test:a"}), 1);
+  check_sync(rdx.commandSync({"GET", "redox_test:a"}), nullptr);
   rdx.disconnect();
 }
 
@@ -228,16 +228,16 @@ TEST_F(RedoxTest, IncrSync) {
   connect();
   int count = 100;
   for (int i = 0; i < count; i++) {
-    check_sync(rdx.commandSync<int>({"INCR", "redox_test:a"}), i + 1);
+    check_sync(rdx.commandSync({"INCR", "redox_test:a"}), i + 1);
   }
-  print_and_check_sync(rdx.commandSync<string>({"GET", "redox_test:a"}), to_string(count));
+  print_and_check_sync(rdx.commandSync({"GET", "redox_test:a"}), to_string(count));
   rdx.disconnect();
 }
 
 TEST_F(RedoxTest, GetSetSyncError) {
   connect();
-  print_and_check_sync<string>(rdx.commandSync<string>({"SET", "redox_test:a", "apple"}), "OK");
-  print_and_check_error_sync<int>(rdx.commandSync<int>({"GET", "redox_test:a"}), 3);
+  print_and_check_sync<string>(rdx.commandSync({"SET", "redox_test:a", "apple"}), "OK");
+  print_and_check_error_sync<int>(rdx.commandSync({"GET", "redox_test:a"}), 3);
   rdx.disconnect();
 }
 
@@ -260,7 +260,7 @@ TEST_F(RedoxTest, MultithreadedCRUD) {
     }
     for (int i = 0; i < count; ++i) {
       try {
-        rdx.commandSync<string>({"SET", "redox_test:mt", "create"});
+        rdx.commandSync({"SET", "redox_test:mt", "create"});
       }
       catch (...) {
         createExcCount++;
@@ -276,7 +276,7 @@ TEST_F(RedoxTest, MultithreadedCRUD) {
     }
     for (int i = 0; i < count; ++i) {
       try {
-        rdx.commandSync<int>({"DEL", "redox_test:mt"});
+        rdx.commandSync({"DEL", "redox_test:mt"});
       }
       catch (...) {
         deleteExcCount++;

@@ -356,9 +356,6 @@ private:
   // In C++14, member variable templates will replace all of these types
   // with a single templated declaration
   // ---------
-  // template<class ReplyT>
-  // std::unordered_map<long, Command<ReplyT>*> commands_;
-  // ---------
   std::unordered_map<long, Command *> commands_reply_;
   std::mutex command_map_guard_; // Guards access to all of the above
 

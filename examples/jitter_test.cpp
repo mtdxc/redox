@@ -71,13 +71,13 @@ int main(int argc, char* argv[]) {
     if(!rdx.connect(host, port)) return 1;
 
     while(count < iter) {
-      rdx.command<string>({"GET", "jitter_test:time"},
-          [&](Command<string>& c) {
+      rdx.command({"GET", "jitter_test:time"},
+          [&](Command& c) {
             if (!c.ok()) {
               cerr << "Bad reply: " << c.status() << endl;
             } else {
               t_new = time_s();
-              t_this_reply = stod(c.reply());
+              t_this_reply = stod(c.reply<string>());
               print_time(
                   t_new - t0,
                   t_new - t,
@@ -99,13 +99,13 @@ int main(int argc, char* argv[]) {
 
     if(!rdx.connect(host, port)) return 1;
 
-      rdx.commandLoop<string>({"GET", "jitter_test:time"},
-          [&](Command<string>& c) {
+      rdx.commandLoop({"GET", "jitter_test:time"},
+          [&](Command& c) {
             if (!c.ok()) {
               cerr << "Bad reply: " << c.status() << endl;
             } else {
               t_new = time_s();
-              t_this_reply = stod(c.reply());
+              t_this_reply = stod(c.reply<string>());
               print_time(
                   t_new - t0,
                   t_new - t,
@@ -126,8 +126,8 @@ int main(int argc, char* argv[]) {
     if(!rdx.connect(host, port)) return 1;
 
     while (count < iter) {
-      rdx.command<string>({"SET", "jitter_test:time", to_string(time_s())},
-          [&](Command<string>& c) {
+      rdx.command({"SET", "jitter_test:time", to_string(time_s())},
+          [&](Command& c) {
             if (!c.ok()) {
               cerr << "Error setting value: " << c.status() << endl;
             }
@@ -143,12 +143,12 @@ int main(int argc, char* argv[]) {
     if(!rdx.connect(host, port)) return 1;
 
     while(count < iter) {
-      Command<string>& c = rdx.commandSync<string>({"GET", "jitter_test:time"});
+      Command& c = rdx.commandSync({"GET", "jitter_test:time"});
       if(!c.ok()) {
         cerr << "Error setting value: " << c.status() << endl;
       } else {
         t_new = time_s();
-        t_this_reply = stod(c.reply());
+        t_this_reply = stod(c.reply<string>());
         print_time(
             t_new - t0,
             t_new - t,
@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
     if(!rdx.connect(host, port)) return 1;
 
     while(count < iter){
-      Command<string>& c = rdx.commandSync<string>({"SET", "jitter_test:time", to_string(time_s())});
+      Command& c = rdx.commandSync({"SET", "jitter_test:time", to_string(time_s())});
       if(!c.ok()) {
         cerr << "Error setting value: " << c.status() << endl;
       }
@@ -208,8 +208,8 @@ int main(int argc, char* argv[]) {
 
     while (count < iter) {
       double t1 = time_s();
-      rdx.command<int>({"PUBLISH", "jitter_test:time", to_string(time_s())},
-          [&](Command<int>& c) {
+      rdx.command({"PUBLISH", "jitter_test:time", to_string(time_s())},
+          [&](Command& c) {
             if (!c.ok()) {
               cerr << "Error setting value: " << c.status() << endl;
             }

@@ -87,9 +87,9 @@ Redis command in the form of an STL vector of strings, and a callback to be invo
 when a reply is received or if there is an error.
 
 ```c++
-rdx.command<string>({"GET", "hello"}, [](Command<string>& c) {
+rdx.command({"GET", "hello"}, [](Command& c) {
   if(c.ok()) {
-    cout << "Hello, async " << c.reply() << endl;
+    cout << "Hello, async " << c.reply<string>() << endl;
   } else {
     cerr << "Command has error code " << c.status() << endl;
   }
@@ -120,12 +120,12 @@ Redox rdx;
 // Block until connected, localhost by default
 if(!rdx.connect()) return 1;
 
-auto got_reply = [](Command<string>& c) {
+auto got_reply = [](Command& c) {
   if(!c.ok()) return;
-  cout << c.cmd() << ": " << c.reply() << endl;
+  cout << c.cmd() << ": " << c.reply<string>() << endl;
 };
 
-for(int i = 0; i < 10; i++) rdx.command<string>({"GET", "hello"}, got_reply);
+for(int i = 0; i < 10; i++) rdx.command({"GET", "hello"}, got_reply);
 
 // Do useful work
 this_thread::sleep_for(chrono::milliseconds(10));
@@ -143,13 +143,13 @@ if(!rdx.connect()) return 1;
 
 int total = 10; // Number of commands to run
 atomic_int count(0); // Number of replies expected
-auto got_reply = [&](Command<string>& c) {
+auto got_reply = [&](Command& c) {
   count++;
-  if(c.ok()) cout << c.cmd() << " #" << count << ": " << c.reply() << endl;
+  if(c.ok()) cout << c.cmd() << " #" << count << ": " << c.reply<string>() << endl;
   if(count == total) rdx.stop(); // Signal to shut down
 };
 
-for(int i = 0; i < total; i++) rdx.command<string>({"GET", "hello"}, got_reply);
+for(int i = 0; i < total; i++) rdx.command({"GET", "hello"}, got_reply);
 
 // Do useful work
 
@@ -172,8 +172,8 @@ a similar API to `command`, but instead of a callback returns a Command object w
 a reply is received.
 
 ```c++
-Command<string>& c = rdx.commandSync<string>({"GET", "hello"});
-if(c.ok()) cout << c.cmd() << ": " << c.reply() << endl;
+Command& c = rdx.commandSync({"GET", "hello"});
+if(c.ok()) cout << c.cmd() << ": " << c.reply<string>() << endl;
 c.free();
 ```
 
@@ -190,8 +190,8 @@ to repeat the command. It then runs the command on the given interval until the 
 calls `c.free()`.
 
 ```c++
-Command<string>& cmd = rdx.commandLoop<string>({"GET", "hello"}, [](Command<string>& c) {
-  if(c.ok()) cout << c.cmd() << ": " << c.reply() << endl;
+Command& cmd = rdx.commandLoop({"GET", "hello"}, [](Command& c) {
+  if(c.ok()) cout << c.cmd() << ": " << c.reply<string>() << endl;
 }, 0.1);
 
 this_thread::sleep_for(chrono::seconds(1));
@@ -204,8 +204,8 @@ not return a command object, because the memory is automatically freed after the
 is invoked.
 
 ```c++
-rdx.commandDelayed<string>({"GET", "hello"}, [](Command<string>& c) {
-  if(c.ok()) cout << c.cmd() << ": " << c.reply() << endl;
+rdx.commandDelayed({"GET", "hello"}, [](Command& c) {
+  if(c.ok()) cout << c.cmd() << ": " << c.reply<string>() << endl;
 }, 1);
 this_thread::sleep_for(chrono::seconds(2));
 ```

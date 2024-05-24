@@ -43,11 +43,11 @@ int main(int argc, char* argv[]) {
   double t0 = time_s();
   atomic_int count(0);
 
-  vector<Command<int>*> commands;
+  vector<Command*> commands;
   for(int i = 0; i < parallel; i++) {
-    commands.push_back(&rdx.commandLoop<int>(
+    commands.push_back(&rdx.commandLoop(
         cmd_vec,
-        [&count, &rdx](Command<int>& c) {
+        [&count, &rdx](Command& c) {
           if (!c.ok()) {
             cerr << "Bad reply: " << c.status() << endl;
           }
