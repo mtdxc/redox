@@ -95,7 +95,7 @@ if (lib)
 
   add_library(redox SHARED ${SRC_REDOX_ALL} ${INC_REDOX_CORE})
   target_link_libraries(redox ${REDOX_LIB_DEPS})
-
+  target_compile_definitions(redox PUBLIC REDOX_EXPORTS)
   set_target_properties(redox
     PROPERTIES VERSION ${REDOX_VERSION_STRING}
     SOVERSION ${REDOX_VERSION_MAJOR})
@@ -105,6 +105,7 @@ endif()
 if (static_lib)
 
   add_library(redox_static STATIC ${SRC_REDOX_ALL})
+  target_compile_definitions(redox_static PUBLIC REDOX_STATICLIB)
   target_link_libraries(redox_static ${REDOX_LIB_DEPS})
 
   set_target_properties(redox_static

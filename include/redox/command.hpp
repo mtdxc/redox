@@ -19,7 +19,7 @@
 */
 
 #pragma once
-
+#include "rapi.h"
 #include <string>
 #include <functional>
 #include <atomic>
@@ -44,7 +44,7 @@ class Redox;
 * represent a deferred or looping command, in which case the success or
 * error callbacks are invoked more than once.
 */
-class Command {
+class REDOX_EXPORT Command {
 
 public:
   // Reply codes

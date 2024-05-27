@@ -24,7 +24,7 @@
 
 namespace redox {
 
-class Subscriber {
+class REDOX_EXPORT Subscriber {
 
 public:
   /**

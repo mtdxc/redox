@@ -252,18 +252,14 @@ void Command::stopTimer() {
   ev_timer_stop(rdx_->evloop_, &timer_);
 #endif
 }
-#if 0
-// Explicit template instantiation for available types, so that the generated
-// library contains them and we can keep the method definitions out of the
-// header file.
-template class Command<redisReply *>;
-template class Command<string>;
-template class Command<char *>;
-template class Command<int>;
-template class Command<long long int>;
-template class Command<nullptr_t>;
-template class Command<vector<string>>;
-template class Command<set<string>>;
-template class Command<unordered_set<string>>;
-#endif
+
+template REDOX_EXPORT string Command::reply();
+template REDOX_EXPORT redisReply *Command::reply();
+template REDOX_EXPORT char *Command::reply();
+template REDOX_EXPORT int Command::reply();
+template REDOX_EXPORT long long int Command::reply();
+template REDOX_EXPORT nullptr_t Command::reply();
+template REDOX_EXPORT vector<string> Command::reply();
+template REDOX_EXPORT set<string> Command::reply();
+template REDOX_EXPORT unordered_set<string> Command::reply();
 } // End namespace redox

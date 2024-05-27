@@ -57,7 +57,7 @@ static const std::string REDIS_DEFAULT_PATH = "/var/run/redis/redis.sock";
 * Redox is a Redis client for C++. It provides a synchronous and asynchronous
 * API for using Redis in high-performance situations.
 */
-class Redox {
+class REDOX_EXPORT Redox {
 
 public:
   // Connection states
